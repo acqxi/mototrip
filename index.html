@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>北海岸重機大環線：山海一日遊</title>
+  <meta name="description" content="從新莊出發，涵蓋102甲秘境、台灣極東點三貂角燈塔，沿台2線北海岸巡航野柳、淡水，完整互動式重機大環線行程規劃。含測速預警、坡度指數與車速參考。">
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+        integrity="sha512-papm1B5MyBRC6pynr+UmEkqMfrg19hBM7UMn5Q2V70deWSuCzY4WgzahbUMQe4X11BYn5gyK9f2QFL5VWNxgXg=="
+        crossorigin="anonymous" referrerpolicy="no-referrer">
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Alpine.js v3 (defer) -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"></script>
+
+  <style>
+    [x-cloak] { display: none !important; }
+    body { font-family: 'Noto Sans TC', sans-serif; background-color: #f1f5f9; }
+    #map { z-index: 1; }
+    .hero-bg {
+      background: linear-gradient(rgba(15,23,42,.75), rgba(15,23,42,.75)),
+        url('https://images.unsplash.com/photo-1558981403-c5f9899a28bc?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80') center/cover;
+    }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .slope-bar { transition: width 0.6s ease; }
+  </style>
+</head>
+
+<body class="antialiased text-slate-800 min-h-screen"
+      x-data="tripApp()"
+      x-init="init()">
+
+  <!-- LOADING -->
+  <div x-show="loading"
+       class="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center z-50 gap-4">
+    <i class="fa-solid fa-motorcycle text-5xl text-rose-400 animate-bounce"></i>
+    <p class="text-white text-lg font-semibold">載入路線資料中&hellip;</p>
+  </div>
+
+  <!-- ERROR -->
+  <div x-show="error && !loading"
+       class="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center z-50 gap-3 px-6">
+    <i class="fa-solid fa-triangle-exclamation text-5xl text-amber-400"></i>
+    <p class="text-white text-xl font-bold">無法載入路線資料</p>
+    <p class="text-slate-400 text-sm text-center" x-text="error"></p>
+  </div>
+
+  <!-- MAIN APP -->
+  <div x-show="route && !loading" x-cloak>
+
+    <!-- HERO -->
+    <header class="hero-bg text-white py-16 px-4 text-center">
+      <div class="max-w-2xl mx-auto">
+        <p class="text-rose-300 text-xs font-bold tracking-[0.25em] uppercase mb-3">
+          Taiwan North Coast Motorcycle Grand Loop
+        </p>
+        <h1 class="text-4xl md:text-5xl font-black mb-3 tracking-wide leading-tight">
+          <i class="fa-solid fa-motorcycle mr-2"></i>
+          <span x-text="route.meta.title"></span>
+        </h1>
+        <p class="text-slate-300 text-base md:text-lg mb-8 font-medium"
+           x-text="route.meta.subtitle"></p>
+
+        <!-- Stats pills -->
+        <div class="flex flex-wrap justify-center gap-3 text-sm font-semibold mb-6">
+          <span class="bg-white/10 backdrop-blur-sm border border-white/20 px-4 py-2 rounded-full">
+            <i class="fa-regular fa-clock mr-2 text-blue-300"></i>
+            <span x-text="route.meta.totalDuration"></span>
+          </span>
+          <span class="bg-white/10 backdrop-blur-sm border border-white/20 px-4 py-2 rounded-full">
+            <i class="fa-solid fa-motorcycle mr-2 text-emerald-300"></i>
+            <span x-text="route.meta.ridingDuration"></span>
+          </span>
+          <span class="bg-white/10 backdrop-blur-sm border border-white/20 px-4 py-2 rounded-full">
+            <i class="fa-solid fa-route mr-2 text-amber-300"></i>
+            <span x-text="route.meta.totalDistance"></span>
+          </span>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="flex flex-wrap justify-center gap-3">
+          <a :href="route.meta.mapUrl" target="_blank" rel="noopener noreferrer"
+             class="bg-rose-600 hover:bg-rose-500 active:bg-rose-700 transition-colors px-5 py-3 rounded-full font-bold text-sm shadow-lg flex items-center gap-2">
+            <i class="fa-solid fa-map-location-dot"></i>Google Map 路線
+          </a>
+          <button @click="toggleMap()"
+                  class="bg-white/10 hover:bg-white/20 border border-white/30 transition-colors px-5 py-3 rounded-full font-bold text-sm flex items-center gap-2">
+            <i class="fa-solid fa-map"></i>
+            <span x-text="showMap ? '隱藏地圖' : '顯示路線地圖'"></span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- EXPRESS ROAD BANNER -->
+    <div class="bg-slate-900 text-slate-300 px-4 py-3 border-b border-slate-700">
+      <div class="max-w-4xl mx-auto flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+        <span class="flex items-center gap-2 flex-wrap">
+          <i class="fa-solid fa-road text-blue-400"></i>
+          <span class="font-semibold text-blue-300">走快速道路：</span>
+          <template x-for="r in route.meta.expressRoads" :key="r">
+            <span class="bg-blue-700 text-white px-2 py-0.5 rounded text-xs font-black" x-text="r"></span>
+          </template>
+        </span>
+        <span class="text-slate-600 hidden sm:inline">｜</span>
+        <span class="flex items-center gap-2 flex-wrap">
+          <i class="fa-solid fa-ban text-red-400"></i>
+          <span class="font-semibold text-red-400">禁行：</span>
+          <template x-for="r in route.meta.prohibitedRoads" :key="r">
+            <span class="bg-red-900 border border-red-600 text-red-300 px-2 py-0.5 rounded text-xs font-black"
+                  x-text="r"></span>
+          </template>
+        </span>
+      </div>
+    </div>
+
+    <!-- MAP -->
+    <div x-show="showMap"
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 -translate-y-2"
+         x-transition:enter-end="opacity-100 translate-y-0"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         class="border-b-4 border-rose-600">
+      <div id="map" class="w-full" style="height:380px;"></div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <main class="max-w-4xl mx-auto px-4 py-8">
+
+      <!-- Phase Tabs (sticky) -->
+      <div class="sticky top-0 z-20 bg-slate-100/95 backdrop-blur-sm -mx-4 px-4
+                  pt-2 pb-3 border-b border-slate-200 shadow-sm mb-6">
+        <div class="flex gap-2 overflow-x-auto no-scrollbar">
+          <template x-for="phase in route.phases" :key="phase.id">
+            <button
+              @click="activePhase = phase.id"
+              :class="activePhase === phase.id
+                ? 'bg-slate-800 text-white shadow-md'
+                : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'"
+              class="flex-shrink-0 px-5 py-2.5 rounded-full text-sm font-bold transition-all duration-200 flex items-center gap-2">
+              <i :class="phase.id === 'morning'
+                   ? 'fa-solid fa-sun text-amber-400'
+                   : 'fa-solid fa-cloud-sun text-sky-400'"></i>
+              <span x-text="phase.title.split('：')[0]"></span>
+              <span class="text-xs opacity-60 hidden sm:inline"
+                    x-text="'（' + phase.stops.length + ' 站）'"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+
+      <!-- Phase Panels -->
+      <template x-for="phase in route.phases" :key="phase.id">
+        <div x-show="activePhase === phase.id" x-transition>
+
+          <!-- Phase header -->
+          <div class="flex items-center gap-4 mb-6">
+            <div class="flex-shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center text-xl"
+                 :class="phase.id === 'morning' ? 'bg-amber-100 text-amber-600' : 'bg-sky-100 text-sky-600'">
+              <i :class="phase.id === 'morning' ? 'fa-solid fa-sun' : 'fa-solid fa-cloud-sun'"></i>
+            </div>
+            <div>
+              <h2 class="text-xl font-black text-slate-800" x-text="phase.title"></h2>
+              <p class="text-slate-500 text-sm mt-0.5" x-text="phase.subtitle"></p>
+            </div>
+          </div>
+
+          <!-- Stop Cards -->
+          <div class="space-y-3">
+            <template x-for="stop in phase.stops" :key="stop.id">
+              <div class="bg-white rounded-2xl shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+                   :class="stop.isHighlight ? 'border-2 border-rose-200' : 'border border-slate-100'">
+
+                <!-- Card Header (tappable) -->
+                <div @click="toggleStop(phase.id + '-' + stop.id)"
+                     class="flex items-center gap-3 p-4 cursor-pointer select-none min-h-[76px]"
+                     :class="isExpanded(phase.id + '-' + stop.id)
+                       ? 'bg-slate-50 border-b border-slate-100'
+                       : 'bg-white'">
+
+                  <!-- Type icon bubble -->
+                  <div class="flex-shrink-0 w-11 h-11 rounded-full flex items-center justify-center
+                              text-base border-2 border-white shadow-sm"
+                       :class="stopTypeColor(stop.type)">
+                    <i :class="'fa-solid ' + stopTypeIcon(stop.type)"></i>
+                  </div>
+
+                  <!-- Main text -->
+                  <div class="flex-grow min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span class="text-xs font-black text-slate-400 font-mono" x-text="stop.id"></span>
+                      <h3 class="font-bold text-slate-800 text-base leading-snug" x-text="stop.title"></h3>
+                      <span x-show="stop.isHighlight"
+                            class="text-xs bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full font-semibold">
+                        ★ 亮點
+                      </span>
+                    </div>
+                    <p class="text-slate-500 text-xs mt-0.5 truncate" x-text="stop.subtitle"></p>
+
+                    <!-- Quick-glance badges -->
+                    <div class="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <template x-if="stop.distanceKm">
+                        <span class="text-xs text-slate-500 flex items-center gap-1">
+                          <i class="fa-solid fa-arrow-right text-slate-300 text-xs"></i>
+                          <span x-text="stop.distanceKm + ' km'"></span>
+                          <span class="text-slate-300">/</span>
+                          <span x-text="stop.durationMin + ' 分'"></span>
+                        </span>
+                      </template>
+                      <!-- Slope badge -->
+                      <span class="text-xs px-2 py-0.5 rounded-full font-semibold flex items-center gap-1"
+                            :class="slopeCfg(stop.slopeType).badges">
+                        <i :class="'fa-solid ' + slopeCfg(stop.slopeType).icon + ' text-xs'"></i>
+                        <span x-text="slopeCfg(stop.slopeType).label"></span>
+                      </span>
+                      <!-- Camera badge -->
+                      <template x-if="stop.cameras.count > 0 || stop.cameras.type === 'interval'">
+                        <span class="text-xs px-2 py-0.5 rounded-full font-semibold flex items-center gap-1"
+                              :class="cameraCfg(stop.cameras).badge">
+                          <i :class="'fa-solid ' + cameraCfg(stop.cameras).icon + ' text-xs'"></i>
+                          <span x-text="cameraCfg(stop.cameras).label"></span>
+                        </span>
+                      </template>
+                    </div>
+                  </div>
+
+                  <!-- Expand chevron -->
+                  <div class="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full
+                              bg-slate-100 text-slate-400 transition-transform duration-200"
+                       :class="isExpanded(phase.id + '-' + stop.id) ? 'rotate-180' : ''">
+                    <i class="fa-solid fa-chevron-down text-xs"></i>
+                  </div>
+                </div>
+
+                <!-- Expanded Detail Panel -->
+                <div x-show="isExpanded(phase.id + '-' + stop.id)"
+                     x-transition:enter="transition ease-out duration-200"
+                     x-transition:enter-start="opacity-0"
+                     x-transition:enter-end="opacity-100"
+                     x-transition:leave="transition ease-in duration-150"
+                     x-transition:leave-start="opacity-100"
+                     x-transition:leave-end="opacity-0"
+                     class="px-4 pb-5 pt-4 space-y-4">
+
+                  <!-- Description -->
+                  <p class="text-slate-600 text-sm leading-relaxed" x-text="stop.description"></p>
+
+                  <!-- Road note -->
+                  <div x-show="stop.roadNote"
+                       class="bg-slate-50 border border-slate-200 rounded-xl p-3 flex gap-2.5">
+                    <i class="fa-solid fa-road text-slate-400 mt-0.5 flex-shrink-0 text-sm"></i>
+                    <p class="text-slate-600 text-sm leading-relaxed" x-text="stop.roadNote"></p>
+                  </div>
+
+                  <!-- Express road notice (only for expressway stops) -->
+                  <div x-show="stop.isExpressway"
+                       class="bg-blue-50 border border-blue-200 rounded-xl p-3 flex gap-2.5">
+                    <i class="fa-solid fa-road text-blue-500 mt-0.5 flex-shrink-0"></i>
+                    <div class="text-sm leading-relaxed">
+                      <span class="font-bold text-blue-700">走快速道路：</span>
+                      <template x-for="r in route.meta.expressRoads" :key="r">
+                        <span class="inline-block bg-blue-200 text-blue-800 px-1.5 py-0.5 rounded
+                                     text-xs font-black mx-0.5" x-text="r"></span>
+                      </template>
+                      <span class="mx-1 text-slate-400">｜</span>
+                      <span class="font-bold text-red-600">⛔ 禁行：</span>
+                      <template x-for="r in route.meta.prohibitedRoads" :key="r">
+                        <span class="inline-block bg-red-100 text-red-700 px-1.5 py-0.5 rounded
+                                     text-xs font-black mx-0.5" x-text="r"></span>
+                      </template>
+                    </div>
+                  </div>
+
+                  <!-- Slope indicator bar -->
+                  <div class="bg-slate-50 rounded-xl p-3">
+                    <div class="flex items-center justify-between mb-2">
+                      <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        坡度 / 路況指數
+                      </span>
+                      <span class="text-xs font-semibold px-2 py-0.5 rounded-full"
+                            :class="slopeCfg(stop.slopeType).badges"
+                            x-text="slopeCfg(stop.slopeType).riskLabel"></span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                      <div class="flex-grow h-3 bg-slate-200 rounded-full overflow-hidden">
+                        <div class="h-full rounded-full slope-bar"
+                             :class="slopeCfg(stop.slopeType).bar"
+                             :style="'width:' + slopeCfg(stop.slopeType).width + '%'"></div>
+                      </div>
+                      <span class="text-sm flex-shrink-0 w-12 text-right"
+                            x-text="'🔥'.repeat(slopeCfg(stop.slopeType).flames) || '━'"></span>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-1.5">
+                      <i :class="'fa-solid ' + slopeCfg(stop.slopeType).icon + ' mr-1'"></i>
+                      <span x-text="slopeCfg(stop.slopeType).label"></span>
+                    </p>
+                  </div>
+
+                  <!-- Speed reference table -->
+                  <div x-show="stop.speedLimit || stop.freedomSpeed">
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                      騎士儀表板：車速參考
+                    </p>
+                    <div class="grid grid-cols-2 gap-2 mb-2">
+                      <div class="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
+                        <div class="text-xs text-green-600 font-semibold mb-1">🟢 合法限速</div>
+                        <div class="text-3xl font-black text-green-700"
+                             x-text="stop.speedLimit ? stop.speedLimit : '—'"></div>
+                        <div class="text-xs text-green-500 font-medium mt-0.5"
+                             x-show="stop.speedLimit">km/h</div>
+                      </div>
+                      <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">
+                        <div class="text-xs text-amber-600 font-semibold mb-1">🟡 車流動態</div>
+                        <div class="text-2xl font-black text-amber-700"
+                             x-text="stop.freedomSpeed ? stop.freedomSpeed : '—'"></div>
+                        <div class="text-xs text-amber-500 font-medium mt-0.5"
+                             x-show="stop.freedomSpeed">km/h</div>
+                      </div>
+                    </div>
+                    <!-- Speed disclaimer -->
+                    <p class="text-xs text-slate-400 italic leading-relaxed"
+                       x-text="route.meta.speedDisclaimer"></p>
+                  </div>
+
+                  <!-- Speed camera warning -->
+                  <div x-show="stop.cameras.count > 0 || stop.cameras.type === 'interval'"
+                       class="border rounded-xl p-3 flex items-start gap-3"
+                       :class="stop.cameras.type === 'interval'
+                         ? 'bg-red-50 border-red-200'
+                         : 'bg-amber-50 border-amber-200'">
+                    <i class="fa-solid text-xl flex-shrink-0 mt-0.5"
+                       :class="stop.cameras.type === 'interval'
+                         ? 'fa-triangle-exclamation text-red-500'
+                         : 'fa-camera text-amber-500'"></i>
+                    <div>
+                      <div class="font-bold text-sm"
+                           :class="stop.cameras.type === 'interval' ? 'text-red-700' : 'text-amber-700'">
+                        <span x-show="stop.cameras.type === 'interval'">
+                          ⚠️ 區間測速警戒！全段務必定速行駛
+                        </span>
+                        <span x-show="stop.cameras.type !== 'interval'"
+                              x-text="'📷 固定測速桿 ' + stop.cameras.count + ' 支'"></span>
+                      </div>
+                      <div class="text-xs text-slate-600 mt-0.5 leading-relaxed"
+                           x-show="stop.cameras.note"
+                           x-text="stop.cameras.note"></div>
+                    </div>
+                  </div>
+
+                </div><!-- /expanded -->
+              </div><!-- /card -->
+            </template>
+          </div><!-- /cards list -->
+
+          <!-- Phase footer summary -->
+          <div class="mt-5 bg-white rounded-2xl border border-slate-100 p-4 text-center text-slate-500 text-sm">
+            <i class="fa-regular fa-clock mr-1.5"></i>
+            <span x-text="phase.subtitle"></span>
+          </div>
+
+        </div><!-- /phase panel -->
+      </template>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="bg-slate-800 text-slate-400 py-10 px-4 mt-4">
+      <div class="max-w-4xl mx-auto">
+        <div class="text-center mb-5">
+          <i class="fa-solid fa-motorcycle text-2xl text-slate-500 mb-2 block"></i>
+          <p class="font-bold text-slate-300 text-lg">北海岸重機大環線</p>
+          <p class="text-sm mt-1">Ride Safe &middot; Ride Legal &middot; Ride Free.</p>
+        </div>
+        <div class="border-t border-slate-700 pt-5">
+          <p class="text-xs text-center text-slate-500 leading-relaxed"
+             x-text="route.meta.speedDisclaimer"></p>
+        </div>
+      </div>
+    </footer>
+
+  </div><!-- /main app -->
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV/XN/WLcE=" crossorigin=""></script>
+
+  <script>
+  function tripApp() {
+    return {
+      route: null,
+      loading: true,
+      error: null,
+      activePhase: 'morning',
+      expandedStops: {},
+      showMap: false,
+      mapReady: false,
+      leafletMap: null,
+
+      async init() {
+        try {
+          const res = await fetch('./routeData.json');
+          if (!res.ok) throw new Error('HTTP ' + res.status + '：無法載入 routeData.json');
+          this.route = await res.json();
+        } catch (e) {
+          this.error = e.message;
+        } finally {
+          this.loading = false;
+        }
+      },
+
+      toggleStop(key) {
+        this.expandedStops[key] = !this.expandedStops[key];
+      },
+
+      isExpanded(key) {
+        return !!this.expandedStops[key];
+      },
+
+      toggleMap() {
+        this.showMap = !this.showMap;
+        if (this.showMap) {
+          this.$nextTick(() => {
+            if (!this.mapReady) {
+              this.initMap();
+            } else {
+              this.leafletMap.invalidateSize();
+            }
+          });
+        }
+      },
+
+      initMap() {
+        if (!this.route || !window.L) return;
+
+        const coords = [];
+        this.route.phases.forEach(ph => {
+          ph.stops.forEach(s => { if (s.lat && s.lng) coords.push([s.lat, s.lng]); });
+        });
+
+        this.leafletMap = L.map('map', { zoomControl: true })
+          .setView([25.12, 121.73], 10);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          maxZoom: 18
+        }).addTo(this.leafletMap);
+
+        L.polyline(coords, { color: '#e11d48', weight: 4, opacity: 0.85, lineJoin: 'round' })
+          .addTo(this.leafletMap);
+
+        const seen = new Set();
+        this.route.phases.forEach(ph => {
+          ph.stops.forEach(s => {
+            if (!s.lat || !s.lng) return;
+            // Round to 4 dp (~11 m precision) to avoid floating-point key mismatches
+            const ck = s.lat.toFixed(4) + ',' + s.lng.toFixed(4);
+            if (seen.has(ck)) return;
+            seen.add(ck);
+
+            const bg = (s.type === 'start' || s.type === 'end') ? '#0f172a'
+                     : s.isHighlight ? '#e11d48' : '#1d4ed8';
+
+            const icon = L.divIcon({
+              className: '',
+              html: '<div style="background:' + bg + ';color:white;border-radius:50%;width:30px;height:30px;'
+                  + 'display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;'
+                  + 'border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,.4)">' + s.id + '</div>',
+              iconSize: [30, 30],
+              iconAnchor: [15, 15],
+              popupAnchor: [0, -18]
+            });
+
+            L.marker([s.lat, s.lng], { icon })
+              .addTo(this.leafletMap)
+              .bindPopup(
+                '<div style="font-family:sans-serif;min-width:140px;padding:2px">'
+                + '<b style="font-size:14px">' + s.title + '</b>'
+                + (s.subtitle ? '<br><small style="color:#64748b">' + s.subtitle + '</small>' : '')
+                + '</div>'
+              );
+          });
+        });
+
+        if (coords.length) this.leafletMap.fitBounds(coords, { padding: [20, 20] });
+        this.mapReady = true;
+      },
+
+      slopeCfg(type) {
+        const m = {
+          flat:       { label:'平坦巡航',      badges:'bg-green-100 text-green-800',   bar:'bg-green-400',   width:15, flames:0, icon:'fa-minus',            riskLabel:'平順好騎' },
+          coastal:    { label:'海岸平路',      badges:'bg-cyan-100 text-cyan-800',     bar:'bg-cyan-400',    width:20, flames:0, icon:'fa-water',            riskLabel:'平順好騎' },
+          gentle_up:  { label:'緩上坡 3–5%',  badges:'bg-yellow-100 text-yellow-800', bar:'bg-yellow-400',  width:50, flames:1, icon:'fa-arrow-trend-up',   riskLabel:'中等爬坡' },
+          steep_up:   { label:'急陡坡 7–10%', badges:'bg-red-100 text-red-800',       bar:'bg-red-500',     width:92, flames:3, icon:'fa-fire',             riskLabel:'高難度 🔥' },
+          steep_down: { label:'長陡下坡',      badges:'bg-orange-100 text-orange-800', bar:'bg-orange-400',  width:75, flames:2, icon:'fa-arrow-trend-down', riskLabel:'需謹慎' },
+          city:       { label:'市區路段',      badges:'bg-slate-100 text-slate-700',   bar:'bg-slate-400',   width:30, flames:0, icon:'fa-city',             riskLabel:'車流複雜' },
+          expressway: { label:'快速道路',      badges:'bg-blue-100 text-blue-800',     bar:'bg-blue-400',    width:30, flames:0, icon:'fa-road',             riskLabel:'高速巡航' },
+          mixed:      { label:'市區海岸交錯',  badges:'bg-teal-100 text-teal-800',     bar:'bg-teal-400',    width:40, flames:1, icon:'fa-shuffle',          riskLabel:'留意路況' },
+        };
+        return m[type] || m.flat;
+      },
+
+      cameraCfg(c) {
+        if (!c || (c.count === 0 && c.type !== 'interval'))
+          return { label:'✓ 無測速', badge:'bg-green-100 text-green-700', icon:'fa-circle-check' };
+        if (c.type === 'interval')
+          return { label:'區間測速', badge:'bg-red-100 text-red-700', icon:'fa-triangle-exclamation' };
+        return {
+          label: '固定 ' + c.count + ' 支',
+          badge: c.count >= 3 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700',
+          icon: 'fa-camera'
+        };
+      },
+
+      stopTypeIcon(t) {
+        return ({
+          start:'fa-flag-checkered', end:'fa-house-chimney', landmark:'fa-camera',
+          food:'fa-utensils', fuel:'fa-gas-pump', cafe:'fa-mug-hot', rest:'fa-couch'
+        })[t] || 'fa-location-dot';
+      },
+
+      stopTypeColor(t) {
+        return ({
+          start:'bg-slate-800 text-white', end:'bg-slate-800 text-white',
+          landmark:'bg-blue-100 text-blue-700', food:'bg-rose-100 text-rose-700',
+          fuel:'bg-yellow-100 text-yellow-700', cafe:'bg-amber-100 text-amber-700',
+          rest:'bg-emerald-100 text-emerald-700'
+        })[t] || 'bg-slate-100 text-slate-700';
+      }
+    };
+  }
+  </script>
+
+</body>
+</html>
