@@ -10,7 +10,9 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <!-- Font Awesome -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+        integrity="sha512-papm1B5MyBRC6pynr+UmEkqMfrg19hBM7UMn5Q2V70deWSuCzY4WgzahbUMQe4X11BYn5gyK9f2QFL5VWNxgXg=="
+        crossorigin="anonymous" referrerpolicy="no-referrer">
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
   <!-- Tailwind CSS -->
@@ -460,7 +462,8 @@
         this.route.phases.forEach(ph => {
           ph.stops.forEach(s => {
             if (!s.lat || !s.lng) return;
-            const ck = s.lat + ',' + s.lng;
+            // Round to 4 dp (~11 m precision) to avoid floating-point key mismatches
+            const ck = s.lat.toFixed(4) + ',' + s.lng.toFixed(4);
             if (seen.has(ck)) return;
             seen.add(ck);
 
